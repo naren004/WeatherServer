@@ -1,0 +1,163 @@
+﻿@page "/register"
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject Supabase.Client SupabaseClient
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+
+<div class="register-container mt-15">
+    <MudCard Class="register-card">
+        <MudStack Spacing="3" JustifyContent="Center">
+            <MudText Typo="Typo.h5" Align="Align.Center" Class="title">Create Account</MudText>
+            <MudTextField Label="Full Name" @bind-Value="Name" Placeholder="Enter your name" Required="true" Variant="Variant.Outlined" Class="input-field" />
+            <MudTextField Label="Email" @bind-Value="Email" Placeholder="Enter your email" InputType="InputType.Email"  Required="true" Variant="Variant.Outlined" Class="input-field" />
+            <MudTextField Label="Password" @bind-Value="Password" Placeholder="Enter your password" InputType="InputType.Password" Required="true" Variant="Variant.Outlined" Class="input-field" />
+            <MudTextField Label="Confirm Password" @bind-Value="ConfirmPassword" Placeholder="Re-enter your password" InputType="InputType.Password" Required="true" Variant="Variant.Outlined" Class="input-field" />
+
+            <MudButton OnClick="RegisterUser" Variant="Variant.Filled" Color="Color.Primary" Class="register-button">Register</MudButton>
+
+            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="NavigateToLogin" Class="back-to-login-button">
+                Back to Login
+            </MudButton>
+
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <MudText Color="Color.Error" Align="Align.Center" Class="error-message">@ErrorMessage</MudText>
+            }
+        </MudStack>
+    </MudCard>
+</div>
+
+<style>
+    /* Register Container */
+    .register-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: #f4f6f8;
+        padding: 20px;
+    }
+
+    /* Card Styling */
+    .register-card {
+        width: 100%;
+        max-width: 400px; /* Max width for the card */
+        padding: 1.5rem;
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+        animation: fadeIn 0.5s ease-in-out;
+    }
+
+    /* Card Title */
+    .title {
+        font-weight: 700;
+        color: #2a5298 !important;
+        margin-bottom: 1.2rem;
+        font-size: 2rem;
+
+    }
+
+    /* Input Fields */
+    .input-field {
+        font-size: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        background-color: #f9f9f9;
+        height: 40px; /* Reduce the height of the input box */
+    }
+
+        .input-field .mud-input {
+            padding: 10px;
+            height: 40px; /* Consistent height for inputs */
+        }
+
+    /* Buttons */
+    .register-button {
+        width: 100%;
+        font-weight: bold;
+        margin-top: 1rem;
+        background-color: #1e3c72 !important;
+        color: #fff !important;
+        transition: background-color 0.3s ease, transform 0.3s ease;
+        /* margin-bottom: 1rem; */
+    }
+
+        .register-button:hover {
+            background-color: #2a5298 !important;
+        }
+
+    .back-to-login-button {
+        margin-top: 0.5rem;
+        color: #1e3c72 !important;
+        border-color: #1e3c72 !important;
+        transition: all 0.3s ease;
+
+    }
+
+        .back-to-login-button:hover {
+             color: #fff !important;
+            background-color: #1e3c72 !important;
+            border-color: #1e3c72 !important;
+
+        }
+
+    /* Error Message */
+    .error-message {
+        margin-top: 1rem;
+        font-size: 0.875rem;
+        color: #e63946;
+        text-align: center;
+    }
+   </style>
+
+@code {
+    private string Email = string.Empty;
+    private string Name = string.Empty;
+    private string Password = string.Empty;
+    private string ConfirmPassword = string.Empty;
+    private string ErrorMessage = string.Empty;
+    private async Task RegisterUser()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(Email) || string.IsNullOrEmpty(Password) || string.IsNullOrEmpty(ConfirmPassword) || string.IsNullOrEmpty(Name))
+            {
+                ErrorMessage = "All fields are required.";
+                return;
+            }
+
+            if (Password != ConfirmPassword)
+            {
+                ErrorMessage = "Passwords do not match.";
+                return;
+            }
+
+            var result = await SupabaseClient.Auth.SignUp(Email, Password);
+
+            if (result?.User != null)
+            {
+                // Store the user's Name in LocalStorage
+                await LocalStorage.SetItemAsync("userName", Name);  // Store Name here
+                await LocalStorage.SetItemAsync("authToken", result.AccessToken);
+                await LocalStorage.SetItemAsync("userEmail", Email);
+
+                Snackbar.Add("Registration successful! You can now log in.", Severity.Success);
+                Navigation.NavigateTo("/login");  // Navigate to login page after successful registration.
+            }
+            else
+            {
+                ErrorMessage = "Registration failed. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Registration failed: {ex.Message}";
+        }
+    }
+
+
+    private void NavigateToLogin()
+    {
+        Navigation.NavigateTo("/login");
+    }
+}

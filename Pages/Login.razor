@@ -1,0 +1,261 @@
+﻿@page "/login"
+@using MongoDB.Driver
+@using WeatherApp.Models
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject Supabase.Client SupabaseClient
+@inject HttpClient Http
+
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+
+
+<div class="login-container mt-15">
+    <MudCard Class="login-card">
+        <MudStack Spacing="3" JustifyContent="Center">
+            <!-- Title -->
+            <MudText Typo="Typo.h4" Align="Align.Center" Class="title">Welcome!</MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center" Class="subtitle">Sign in to continue</MudText>
+
+            <!-- Email Input -->
+            <MudTextField Label="Email"
+                          @bind-Value="Email"
+                          Placeholder="Enter your email"
+                          Required="true"
+                          InputType="InputType.Email"
+                          Variant="Variant.Outlined"
+                          Class="input-field"
+                          OnKeyDown="HandleKeyDown"
+                          OnClick="OnEmailClick" />
+
+
+
+            <!-- Password Input -->
+            <MudTextField Label="Password"
+                          @bind-Value="Password"
+                          Placeholder="Enter your password"
+                          InputType="InputType.Password"
+                          Required="true"
+                          Variant="Variant.Outlined"
+                          Class="input-field"
+                          OnKeyDown="HandleKeyDown" />
+
+
+            <!-- Login Button -->
+            <MudButton OnClick="async () => await LoginUser()"
+                       Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       Class="login-button">
+                <MudIcon Icon="@Icons.Material.Filled.Login" Class="mr-2" />
+                Login
+            </MudButton>
+
+            <!-- Sign Up Button -->
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Secondary"
+                       OnClick="NavigateToRegister"
+                       FullWidth="true"
+                       Class="signup-button">
+                <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Class="mr-2" />
+                Create Account
+            </MudButton>
+
+            <!-- Error Message -->
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <MudText Color="Color.Error" Align="Align.Center" Class="error-message">
+                    <MudIcon Icon="@Icons.Material.Filled.Error" Class="mr-2" />
+                    @ErrorMessage
+                </MudText>
+            }
+        </MudStack>
+    </MudCard>
+</div>
+
+<style>
+    /* Login Container */
+    .login-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        color: white;
+        transition: all 0.10s ease;
+    }
+
+    /* Card Styling */
+    .login-card {
+        width: 100%;
+        max-width: 400px;
+        padding: 2rem;
+        background: #ffffff;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        animation: fadeIn 0.5s ease-in-out;
+    }
+
+    /* Title Styling */
+    .title {
+        font-weight: 700;
+        color: #1e3c72;
+        margin-bottom: 0.5rem;
+    }
+
+    /* Subtitle Styling */
+    .subtitle {
+        color: #666;
+        margin-bottom: 2rem;
+    }
+
+    /* Input Fields */
+    .input-field {
+        margin-bottom: 1.5rem;
+    }
+
+    /* Buttons */
+    .login-button {
+        margin-top: 1rem;
+        background-color: #1e3c72 !important;
+        color: #fff !important;
+        transition: background-color 0.3s ease, transform 0.3s ease;
+    }
+
+        .login-button:hover {
+            background-color: #2a5298 !important;
+            transform: translateY(-2px);
+        }
+
+    .signup-button {
+        margin-top: 0.5rem;
+        color: #1e3c72 !important;
+        border-color: #1e3c72 !important;
+        transition: all 0.3s ease;
+    }
+
+        .signup-button:hover {
+            color: #fff !important;
+            background-color: #1e3c72 !important;
+            border-color: #1e3c72 !important;
+        }
+
+    /* Error Message */
+    .error-message {
+        margin-top: 1rem;
+        font-size: 0.875rem;
+        color: #e63946;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+</style>
+
+@code {
+    private string Email = string.Empty;
+    private string Password = string.Empty;
+    private string ErrorMessage = string.Empty;
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await LoginUser(); // ✅ Await the method call
+        }
+    }
+
+
+    // Fill in the email and password if previously stored
+    protected override async Task OnInitializedAsync()
+    {
+        // Retrieve saved user credentials from localStorage (if any)
+        Email = await LocalStorage.GetItemAsync<string>("email") ?? string.Empty;
+        Password = await LocalStorage.GetItemAsync<string>("password") ?? string.Empty;
+
+    }
+
+    private async Task LoginUser()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(Email) || string.IsNullOrEmpty(Password))
+            {
+                ErrorMessage = "Email and password are required.";
+                return;
+            }
+
+            var result = await SupabaseClient.Auth.SignIn(Email, Password);
+
+            if (result != null && !string.IsNullOrEmpty(result.AccessToken))
+            {
+                await LocalStorage.SetItemAsync("authToken", result.AccessToken);
+                await LocalStorage.SetItemAsync("userEmail", Email);
+
+
+                // Store the user's email in MongoDB
+
+                Snackbar.Add("Login successful!", Severity.Success);
+                Navigation.NavigateTo("/weather");
+
+                //db connection
+
+                if (string.IsNullOrEmpty(Email))
+                {
+                    Snackbar.Configuration.PositionClass = Defaults.Classes.Position.TopEnd;
+                    Snackbar.Add("Please enter a valid city name.", Severity.Warning);
+                    return;
+                }
+
+                var mail = new FavoriteCity
+                    {
+                        Email = Email
+                    };
+
+                // try
+                // {
+                //     var response = await Http.PostAsJsonAsync("https:weatherapp-hdy3.onrender.com/api/Email", mail);
+
+                //     var responseText = await response.Content.ReadAsStringAsync(); Capture response message
+
+                //     if (response.IsSuccessStatusCode)
+                //     {
+                //         Snackbar.Configuration.PositionClass = Defaults.Classes.Position.TopEnd;
+                //         Snackbar.Add("Email added to DB!", Severity.Success);
+                //     }
+                //     else
+                //     {
+                //         Snackbar.Configuration.PositionClass = Defaults.Classes.Position.TopEnd;
+                //         Snackbar.Add($"Failed to add Email in DB: {responseText}", Severity.Error);
+                //     }
+                // }
+                // catch (Exception ex)
+                // {
+                //     Snackbar.Configuration.PositionClass = Defaults.Classes.Position.TopEnd;
+                //     Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+                // }
+            }
+            else
+            {
+                ErrorMessage = "Invalid login credentials.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Login failed: {ex.Message}";
+        }
+    }
+
+
+
+
+    private void NavigateToRegister()
+    {
+        Navigation.NavigateTo("/register");
+    }
+
+    // Optional: Clear credentials when email input field is clicked
+    private async Task OnEmailClick()
+    {
+        Password = string.Empty;
+        await Task.CompletedTask; // ✅ Ensures it's a valid async method
+    }
+}

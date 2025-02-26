@@ -1,0 +1,491 @@
+﻿@page "/weather"
+@layout MainLayout
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IConfiguration Configuration
+@using MudBlazor
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.Web
+@inject NavigationManager Navigation
+@using System.Linq
+@using WeatherApp.Models
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+
+<PageTitle>Weather Application</PageTitle>
+
+<div class="main-container mt-15">
+    <div class="header">
+        <h1>Welcome to the Weather Application</h1>
+    </div>
+
+    <div class="weather-input">
+        <h2 class="sub-title">Get Weather Information</h2>
+        <input type="text"
+               class="input-box"
+               placeholder="Enter city name"
+               @bind="city"
+               @bind:event="oninput"
+               @onkeydown="HandleKeyPress" />
+
+        <!-- Full-screen overlay and loading spinner -->
+        @if (isFullScreenLoading)
+        {
+            <div class="full-screen-overlay">
+                <div class="loading-container">
+                    <MudProgressCircular Indeterminate="true" Size="@Size.Large" Color="Color.Primary" />
+                    <p class="loading-text">Adding to Favorites...</p>
+                </div>
+            </div>
+        }
+
+        <MudButton Variant="Variant.Filled" Color="Color.Secondary" Class="add-to-fav" @onclick="fav">
+            Add
+            <MudIconButton Icon="@Icons.Material.Filled.Favorite" Color="Color.Primary" aria-label="add to favorite" />
+        </MudButton>
+        <div class="button-container">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary    " OnClick="GetWeather" Class=" mt-4">
+                <b>Get Weather</b>
+            </MudButton>
+        </div>
+
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="forecast" Class=" mt-4">
+        <b>Weather Forecast</b>
+    </MudButton>
+    
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="error-message">@errorMessage</div>
+    }
+
+    @if (weather != null)
+    {
+        <div class="weather-card">
+            <h2 class="sub-title">Weather in @weather.Name</h2>
+            <p><strong>Local Time:</strong> @localTime</p>
+            <p><strong>Temperature:</strong> @weather.Main?.Temp &deg;C</p>
+            <p><strong>Weather:</strong> @weather.Weather?[0]?.Description</p>
+            <p><strong>Humidity:</strong> @weather.Main?.Humidity%</p>
+            <p><strong>Pressure:</strong> @weather.Main?.Pressure hPa</p>
+            <p><strong>Wind Speed:</strong> @weather.Wind?.Speed km/h</p>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(city))
+    {
+        <div class="loading-message">Loading weather data...</div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="error-message">@errorMessage</div>
+    }
+
+    @if (weatherForecast != null)
+    {
+        <div class="forecast">
+            <h3>Weather Forecast for the Next 5 Days in @city</h3>
+            <div class="forecast-grid">
+
+                @foreach (var day in weatherForecast.List.Where((_, i) => i % 8 == 0))
+                {
+                    <div class="forecast-item">
+                        <p><strong>@DateTimeOffset.FromUnixTimeSeconds(day.Dt).DateTime.ToString("MMM dd, yyyy")</strong></p>
+                        <p>@day.Weather[0].Description</p>
+                        <p>@day.Main.Temp &deg;C</p>
+                        <p>Humidity: @day.Main.Humidity%</p>
+                        <p>Wind Speed: @day.Wind?.Speed km/h</p>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+
+@code {
+    private string city = string.Empty;
+    private string UserName = string.Empty;  
+    private WeatherResponse? weather;
+    private string localTime = string.Empty;
+    private string errorMessage = string.Empty;
+    private WeatherForecastResponse? weatherForecast;
+    private string apiKeyForecast = "1a747994fdcf2749fa00c1dd7454e2b6";
+    private string ApiUrlForecast => $"https://api.openweathermap.org/data/2.5/forecast?q={city}&appid={apiKeyForecast}";
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await GetWeather();
+        }
+    }
+    private async void forecast()
+    {
+        Console.WriteLine($"City entered: '{city}'");
+
+        if (string.IsNullOrWhiteSpace(city))
+        {
+            errorMessage = "Please enter a valid city name.";
+            weatherForecast = null;
+            return;
+        }
+
+        try
+        {
+            weatherForecast = await Http.GetFromJsonAsync<WeatherForecastResponse>(ApiUrlForecast);
+
+            if (weatherForecast != null && weatherForecast.List.Any())
+            {
+                errorMessage = string.Empty;
+            }
+            else
+            {
+                errorMessage = "City not found or no data available.";
+                weatherForecast = null;
+            }
+        }
+        catch (Exception)
+        {
+            errorMessage = "Error fetching weather data. Please try again.";
+            weatherForecast = null;
+        }
+    }
+
+
+    private async Task GetWeather()
+    {
+        if (string.IsNullOrWhiteSpace(city))
+        {
+            errorMessage = "Please enter a valid city name.";
+            return;
+        }
+
+        try
+        {
+            string apiKey = "ae0256f4cc84c78906bacc7019637c24"; 
+            string apiUrl = $"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={apiKey}&units=metric";
+
+            weather = await Http.GetFromJsonAsync<WeatherResponse>(apiUrl);
+
+            if (weather != null)
+            {
+                localTime = ConvertUnixToLocalTime(weather.Dt, weather.Timezone);
+                errorMessage = string.Empty;
+            }
+            else
+            {
+                errorMessage = "City not found.";
+            }
+        }
+        catch (Exception)
+        {
+            errorMessage = "Error fetching weather data. Please try again.";
+        }
+    }
+
+    private string ConvertUnixToLocalTime(long unixTimestamp, int timezoneOffset)
+    {
+        var utcDateTime = DateTimeOffset.FromUnixTimeSeconds(unixTimestamp).UtcDateTime;
+        var localDateTime = utcDateTime.AddSeconds(timezoneOffset);
+        return localDateTime.ToString("dddd, MMMM dd yyyy, HH:mm:ss");
+    }
+    private async Task fav()
+    {
+        if (string.IsNullOrWhiteSpace(city))
+        {
+            Snackbar.Configuration.PositionClass = Defaults.Classes.Position.TopEnd;
+            Snackbar.Add("Please enter a valid city name.", Severity.Warning);
+            return;
+        }
+
+        isFullScreenLoading = true; // Activate full-screen loading
+
+        var userjson = await LocalStorage.GetItemAsync<string>("userEmail");
+        var cityToAdd = new FavoriteCity
+            {
+                Email = userjson,
+                CityName = city
+            };
+
+        try
+        {
+            // Check if the city is valid by fetching weather data
+            weatherForecast = await Http.GetFromJsonAsync<WeatherForecastResponse>(ApiUrlForecast);
+
+            if (weatherForecast == null || !weatherForecast.List.Any())
+            {
+                Snackbar.Configuration.PositionClass = Defaults.Classes.Position.TopEnd;
+                Snackbar.Add("Invalid city! Please enter a correct city name.", Severity.Error);
+                weatherForecast = null;
+                isFullScreenLoading = false; // Deactivate full-screen loading
+                return;
+            }
+
+            // Add city to favorites
+            var response = await Http.PostAsJsonAsync("https://weatherserver-mmej.onrender.com/api/Favorites", cityToAdd);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Configuration.PositionClass = Defaults.Classes.Position.TopEnd;
+                Snackbar.Add("City added to favorites!", Severity.Success);
+            }
+            else
+            {
+                var responseText = await response.Content.ReadAsStringAsync();
+                Snackbar.Configuration.PositionClass = Defaults.Classes.Position.TopEnd;
+                Snackbar.Add($"Failed to add city: {responseText}", Severity.Error);
+            }
+        }
+        catch (HttpRequestException httpEx)
+        {
+            Snackbar.Configuration.PositionClass = Defaults.Classes.Position.TopEnd;
+            Snackbar.Add($"Network error: {httpEx.Message}", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Configuration.PositionClass = Defaults.Classes.Position.TopEnd;
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isFullScreenLoading = false; // Deactivate full-screen loading
+        }
+    }
+
+
+
+
+    public class WeatherResponse
+    {
+        public string? Name { get; set; }
+        public MainInfo? Main { get; set; }
+        public WindInfo? Wind { get; set; }
+        public List<WeatherInfo>? Weather { get; set; } = new();
+        public long Dt { get; set; }
+        public int Timezone { get; set; }
+    }
+
+    public class MainInfo
+    {
+        public double Temp { get; set; }
+        public double Humidity { get; set; }
+        public double Pressure { get; set; }
+    }
+
+    public class WindInfo
+    {
+        public double Speed { get; set; }
+    }
+
+    public class WeatherInfo
+    {
+        public string Main { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+    }
+
+    public class WeatherForecastResponse
+    {
+        public List<WeatherForecast> List { get; set; } = new();
+    }
+
+    public class WeatherForecast
+    {
+        public MainInfo Main { get; set; } = new();
+        public WeatherInfo[] Weather { get; set; } = Array.Empty<WeatherInfo>();
+        public long Dt { get; set; }
+        public WindInfo Wind { get; set; } = new();
+    }
+    void ChangePosition(string message, string position)
+    {
+        Snackbar.Clear();
+        Snackbar.Configuration.PositionClass = position;
+        Snackbar.Add(message, Severity.Normal);
+    }
+    private bool isFullScreenLoading = false; // Track full-screen loading state // Track loading state for adding to favorites
+}
+
+<style>
+    /* Main Container Styles */
+    .main-container {
+        width: 100%;
+        max-width: 800px;
+        padding: 30px;
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        text-align: center;
+        margin: 20px auto;
+        font-family: 'Arial', sans-serif;
+        color: #fff;
+    }
+
+    /* Header Styles */
+    .header h1 {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #fff;
+        margin-bottom: 20px;
+        text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Input Field Styles */
+    .input-box {
+        width: 90%;
+        max-width: 520px;
+        height: 50px;
+        padding: 15px;
+        font-size: 1rem;
+        font-weight: 500;
+        border-radius: 30px;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        background-color: rgb(229 227 233 / 96%);
+        color: #252525;
+        transition: all 0.3s ease;
+        outline: none;
+    }
+
+        .input-box:focus {
+            border-color: #00aaff;
+            box-shadow: 0 5px 20px rgba(0, 170, 255, 0.6);
+        }
+
+    /* Button Styles */
+    .MudButton {
+        background-color: #00aaff;
+        color: #fff;
+        padding: 12px 24px;
+        font-size: 1.2rem;
+        font-weight: bold;
+        border-radius: 30px;
+        cursor: pointer;
+        transition: transform 0.3s ease-in-out, background-color 0.3s ease;
+        border: none;
+    }
+
+        .MudButton:hover {
+            transform: translateY(-3px);
+            background-color: #0099cc;
+        }
+
+        .MudButton:active {
+            transform: translateY(1px);
+        }
+
+    /* Error Message Styles */
+    .error-message {
+        color: #ff3f3f;
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-top: 20px;
+    }
+
+    /* Weather Card Styles */
+    .weather-card {
+        padding: 25px;
+        background: linear-gradient(135deg, #8694ad, #2a5298);
+        margin-top: 30px;
+        border-radius: 12px;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        color: #fff;
+        text-align: left;
+    }
+
+        .weather-card h2 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+
+        .weather-card p {
+            font-size: 1.1rem;
+            margin: 5px 0;
+            line-height: 1.5;
+        }
+
+        .weather-card strong {
+            color: #00aaff;
+        }
+
+    /* Loading Message Styles */
+    .loading-message {
+        font-size: 1.2rem;
+        color: #ddd;
+        margin-top: 20px;
+    }
+
+    .sub-title {
+        color: white;
+    }
+
+    .forecast {
+        margin-top: 40px;
+  
+    }
+
+    .forecast-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 20px;
+    }
+
+    .forecast-item {
+        background-color: rgba(255, 255, 255, 0.1);
+        background: linear-gradient(135deg, #8694ad, #2a5298);
+        border-radius: 12px;
+        padding: 15px;
+        text-align: center;
+        transition: transform 0.3s ease, background-color 0.3s ease;
+    }
+
+        .forecast-item:hover {
+            transform: translateY(-5px);
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .forecast-item p {
+            font-size: 1rem;
+            margin: 5px 0;
+            line-height: 1.5;
+        }
+
+        .forecast-item strong {
+            font-weight: 600;
+            color: #00aaff;
+        }
+
+    .add-to-fav {
+        font-size: 1rem; /* Adjust font size */
+        width: 90px; /* Set minimum width */
+        height: 40px; /* Set minimum height */
+	}
+    /* Full-screen overlay */
+    .full-screen-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7); /* Dimmed background */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000; /* Ensure it's on top of everything */
+    }
+
+    /* Loading container */
+    .loading-container {
+        text-align: center;
+        background-color: rgba(255, 255, 255, 0.9); /* Semi-transparent white background */
+        padding: 30px;
+        border-radius: 15px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Loading text */
+    .loading-text {
+        margin-top: 15px;
+        font-size: 1.2rem;
+        color: #333;
+    }
+</style>

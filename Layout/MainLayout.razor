@@ -1,0 +1,162 @@
+﻿@inherits LayoutComponentBase
+@using MudBlazor
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.JSInterop
+@inject NavigationManager Navigation
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+
+    <!-- AppBar with a modern gradient background -->
+    <MudAppBar Elevation="1" Color="Color.Primary" Class="gradient-appbar">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="DrawerToggle" />
+        <MudSpacer /> <!-- Pushes elements to the right -->
+        <!-- Login button (always visible) -->
+        <MudButton Variant="Variant.Filled" OnClick="Login" Color="Color.Secondary" Class="mr-2">
+            <MudIcon Icon="@Icons.Material.Filled.Login" Class="mr-2" />
+            Login
+        </MudButton>
+
+        <!-- Logout button (only visible when logged in) -->
+        @if (isLoggedIn)
+        {
+            <MudButton Variant="Variant.Outlined" OnClick="Logout" Color="Color.Error">
+                <MudIcon Icon="@Icons.Material.Filled.Logout" Class="mr-2" />
+                Logout
+            </MudButton>
+        }
+
+        <MudIconButton Icon="@Icons.Custom.Brands.GitHub" Color="Color.Inherit" Href="https://github.com/naren004" target="_blank" />
+    </MudAppBar>
+
+    <!-- Drawer with a sleek design -->
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" Class="gradient-drawer">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.h5" Class="mt-1 text-white">SkySense</MudText>
+        </MudDrawerHeader>
+
+        <!-- Navigation links with icons and hover effects -->
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="weather" Match="NavLinkMatch.All">
+                <MudIcon Icon="@Icons.Material.Filled.Home" Class="mr-2" />
+                <span>Home</span>
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="forecast">
+                <MudIcon Icon="@Icons.Material.Filled.WbSunny" Class="mr-2" />
+                <span>Weather Forecast</span>
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="favs">
+                <MudIcon Icon="@Icons.Material.Filled.Favorite" Class="mr-2" />
+                <span>Favorites</span>
+            </NavLink>
+        </div>
+    </MudDrawer>
+
+    <!-- Main content area -->
+    <MudMainContent Class="main-content">
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+<style>
+    /* Gradient background for the AppBar */
+    .gradient-appbar {
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+    }
+
+    .gradient-drawer {
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+        border-bottom-right-radius: 50px;
+    }
+
+    /* Main content styling */
+    .main-content {
+        padding: 20px;
+        background-color: #f5f5f5;
+        min-height: 100vh;
+    }
+
+    /* Navigation link styling */
+    .nav-item {
+        margin: 10px 0;
+    }
+
+    .nav-link {
+        display: flex;
+        align-items: center;
+        padding: 10px 15px;
+        border-radius: 8px;
+        color: #fff;
+        text-decoration: none;
+        transition: background-color 0.3s ease, transform 0.3s ease;
+    }
+
+        .nav-link:hover {
+            background-color: white;
+            transform: translateX(5px);
+        }
+
+        .nav-link.active {
+            background-color: rgba(255, 255, 255, 0.2);
+            background-color: white;
+            color: #1e3c72;
+        }
+
+    /* Button hover effects */
+    .mud-button:hover {
+        transform: translateY(-2px);
+        background-color: white;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Text and icon styling */
+    .text-white {
+        color: #fff;
+    }
+
+    .mud-icon {
+        font-size: 1.2rem;
+    }
+</style>
+
+@code {
+    private bool _drawerOpen = false; // Default: Drawer Open
+    private bool isLoggedIn = false; // Track user login state
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check local storage for login state on component initialization
+        isLoggedIn = await LocalStorage.GetItemAsync<bool>("isLoggedIn");
+    }
+
+    private void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen; // Toggle drawer state
+    }
+
+    private async Task Login()
+    {
+        Console.WriteLine("Login button clicked");
+        isLoggedIn = true; // Set user as logged in
+        await LocalStorage.SetItemAsync("isLoggedIn", true); // Save login state to local storage
+        Navigation.NavigateTo("login");
+    }
+
+    private async Task Logout()
+    {
+        Console.WriteLine("Logout button clicked");
+        isLoggedIn = false; // Set user as logged out
+        await LocalStorage.RemoveItemAsync("isLoggedIn"); // Remove login state from local storage
+        Navigation.NavigateTo("logout");
+    }
+}

@@ -1,0 +1,232 @@
+﻿@page "/favs"
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+@inject ISnackbar Snackbar
+@using WeatherApp.Models
+@using System.Text.Json
+@using MudBlazor
+
+<PageTitle>Favorite Cities</PageTitle>
+
+<div class="main-container mt-15">
+    <div class="weather-input">
+        <h2 class="head-title">Your Favorite Cities</h2>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading-message">Loading your favorite cities...</div>
+    }
+    else if (!isUserLoggedIn)
+    {
+        <div class="error-message">Please log in to view your favorite cities.</div>
+    }
+    else if (favoriteCities != null && favoriteCities.Any())
+    {
+        <div class="forecast">
+            <h3>Weather for Your Favorite Cities</h3>
+            <div class="forecast-container">
+                @foreach (var city in favoriteCities)
+                {
+                    var weather = cityWeather.FirstOrDefault(w => w.City == city.CityName);
+                    if (weather != null)
+                    {
+                        <div class="forecast-item">
+                            <p class="city-name">@city.CityName</p>
+                            <p>@weather.Condition</p>
+                            <p class="temp">@weather.Temperature &deg;C</p>
+                            <p>Humidity: @weather.Humidity%</p>
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteCity(city.CityName)" />
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="error-message">You have no favorite cities saved.</div>
+    }
+</div>
+
+<style>
+
+    .forecast-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 20px;
+        padding: 10px;
+        justify-content: center;
+        max-width: 100%;
+    }
+
+    .forecast-item {
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+        border-radius: 12px;
+        padding: 20px;
+        color: white;
+        text-align: center;
+        box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+        transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+    }
+
+        .forecast-item:hover {
+            transform: scale(1.05);
+            box-shadow: 0px 6px 15px rgba(0, 0, 0, 0.3);
+        }
+
+    .city-name {
+        font-size: 1.5rem;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    .temp {
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+
+
+    .delete-button {
+        margin-top: 10px;
+        cursor: pointer;
+    }
+
+        .delete-button:hover {
+            color: red;
+        }
+
+    .city-name {
+        font-size: 1.5rem;
+        font-weight: bold;
+        text-transform: uppercase; /* Converts text to uppercase */
+    }
+
+</style>
+
+@code {
+    private List<FavoriteCity> favoriteCities = new();
+    private List<CityWeather> cityWeather = new();
+    private bool isLoading = false;
+    private bool isUserLoggedIn = false;
+
+    private string apiKey = "1a747994fdcf2749fa00c1dd7454e2b6";
+    private string ApiUrlForecast(string city) => $"https://api.openweathermap.org/data/2.5/weather?q={city}&units=metric&appid={apiKey}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckUserLogin();
+        if (isUserLoggedIn)
+        {
+            await LoadFavoriteCities();
+            await FetchWeatherData();
+        }
+    }
+
+    private async Task CheckUserLogin()
+    {
+        var userEmail = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "userEmail");
+        isUserLoggedIn = !string.IsNullOrEmpty(userEmail);
+    }
+
+    private async Task LoadFavoriteCities()
+    {
+        isLoading = true;
+        try
+        {
+            var email = await LocalStorage.GetItemAsync<string>("userEmail");
+            var response = await Http.GetAsync($"https://weatherserver-mmej.onrender.com/api/Favorites/{email}");
+            if (response.IsSuccessStatusCode)
+            {
+                favoriteCities = await response.Content.ReadFromJsonAsync<List<FavoriteCity>>() ?? new List<FavoriteCity>();
+                await JSRuntime.InvokeVoidAsync("localStorage.setItem", "favoriteCities", JsonSerializer.Serialize(favoriteCities));
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error fetching favorites: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task FetchWeatherData()
+    {
+        foreach (var city in favoriteCities)
+        {
+            try
+            {
+                var response = await Http.GetAsync(ApiUrlForecast(city.CityName));
+                if (response.IsSuccessStatusCode)
+                {
+                    var weatherResponse = await response.Content.ReadFromJsonAsync<WeatherApiResponse>();
+                    if (weatherResponse != null)
+                    {
+                        cityWeather.Add(new CityWeather
+                            {
+                                City = city.CityName,
+                                Temperature = weatherResponse.Main.Temp,
+                                Humidity = weatherResponse.Main.Humidity,
+                                Condition = weatherResponse.Weather[0].Description
+                            });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error fetching weather for {city.CityName}: {ex.Message}", Severity.Warning);
+            }
+        }
+    }
+
+    private async Task DeleteCity(string cityName)
+    {
+        try
+        {
+            var response = await Http.DeleteAsync($"https://weatherserver-mmej.onrender.com/api/Favorites/{cityName}");
+            if (response.IsSuccessStatusCode)
+            {
+                favoriteCities.RemoveAll(c => c.CityName == cityName);
+                cityWeather.RemoveAll(w => w.City == cityName);
+                Snackbar.Add($"{cityName} removed from favorites.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Failed to remove {cityName}.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error deleting {cityName}: {ex.Message}", Severity.Error);
+        }
+    }
+
+
+    public class CityWeather
+    {
+        public string City { get; set; }
+        public double Temperature { get; set; }
+        public int Humidity { get; set; }
+        public string Condition { get; set; }
+    }
+
+    public class WeatherApiResponse
+    {
+        public MainInfo Main { get; set; }
+        public List<WeatherInfo> Weather { get; set; }
+    }
+
+    public class MainInfo
+    {
+        public double Temp { get; set; }
+        public int Humidity { get; set; }
+    }
+
+    public class WeatherInfo
+    {
+        public string Description { get; set; }
+    }
+}

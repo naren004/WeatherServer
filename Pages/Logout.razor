@@ -1,0 +1,80 @@
+﻿@page "/logout"
+@inject NavigationManager Navigation
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+@using MudBlazor
+@inject ISnackbar Snackbar
+
+<PageTitle>Logout</PageTitle>
+
+<div class="logout-container mt-15">
+    <MudPaper Elevation="3" Class="logout-paper">
+        <MudText Typo="Typo.h4" Class="mb-4">Are you sure you want to log out?</MudText>
+        <MudText Typo="Typo.body1" Class="mb-6">You can always log back in later.</MudText>
+
+        <div class="button-container">
+            <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="ConfirmLogout" Class="mr-3">
+                <MudIcon Icon="@Icons.Material.Filled.Logout" Class="mr-2" />
+                Log Out
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="CancelLogout">
+                <MudIcon Icon="@Icons.Material.Filled.Cancel" Class="mr-2" />
+                Cancel
+            </MudButton>
+        </div>
+    </MudPaper>
+</div>
+
+<style>
+    /* Container styling */
+    .logout-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    /* Paper styling */
+    .logout-paper {
+        padding: 30px;
+        border-radius: 12px;
+        background-color: #ffffff;
+        text-align: center;
+        max-width: 500px;
+        width: 100%;
+    }
+
+    /* Button container styling */
+    .button-container {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 20px;
+    }
+
+    /* Button hover effects */
+    .mud-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+</style>
+
+@code {
+    private async Task ConfirmLogout()
+    {
+        // Perform logout logic here (e.g., clear session, remove tokens, etc.)
+        Console.WriteLine("User logged out.");
+
+        // Await the removal of items
+        await LocalStorage.RemoveItemAsync("userEmail");
+        await LocalStorage.RemoveItemAsync("authToken");
+        await LocalStorage.RemoveItemAsync("UserName");
+
+        // Navigate to the home page or login page after logout
+        Navigation.NavigateTo("/");
+    }
+
+    private void CancelLogout()
+    {
+        // Navigate back to the previous page or home page
+        Navigation.NavigateTo("/forecast");
+    }
+}
